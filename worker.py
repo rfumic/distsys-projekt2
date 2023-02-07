@@ -1,7 +1,6 @@
 import aiohttp
 import asyncio
 import random
-import time
 import re
 from aiohttp import web
 
@@ -12,10 +11,10 @@ def number_of_words(string):
 
 @routes.post('/worker')
 async def worker(request):
-    time.sleep(random.uniform(0.1,0.3))
+    await asyncio.sleep(random.uniform(0.1,0.3))
     req = await request.json()
     wordsInFile = number_of_words(req['file'])
-    time.sleep(random.uniform(0.1,0.3))
+    await asyncio.sleep(random.uniform(0.1,0.3))
     
     return web.json_response({'fileName': req['fileName'],'numberOfWords':wordsInFile},status=200)
 
