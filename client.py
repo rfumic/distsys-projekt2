@@ -1,7 +1,6 @@
 import asyncio
 import json
 import aiohttp
-import pandas as pd
 import itertools
 
 def chunked(it,size):
@@ -45,13 +44,13 @@ async def main():
             d = json.loads(line)
             dataset.append(d['content'])
 
-    clientsWCode = generate_client_dict(dataset,int(len(dataset)/len(clientIds)), clientIds)
+    clientsWCode = generate_client_dict(dataset[0],int(len(dataset[0])/len(clientIds)+1), clientIds)
 
-   
-    for chunk in chunked(clientsWCode.items(), 200):
-        results = await send_code(chunk)
-        for r in results:
-            print(r)
+    results = await send_code(clientsWCode)
+    # for chunk in chunked(clientsWCode.items(), 200):
+    #     results = await send_code(chunk)
+    #     for r in results:
+    #        print(r)
 
 
 asyncio.run(main())
