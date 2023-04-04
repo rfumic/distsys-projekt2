@@ -25,34 +25,34 @@ completed_tasks = 0
 print(f"Master running with {NO_OF_WORKERS} workers")
 
 
-async def split_send(codeString):
+async def split_send(codeString, session):
     splitCode = codeString.splitlines()
 
     availableWorkers = workerPorts
     responses = []
     tasks = []
-    async with aiohttp.ClientSession() as s:
-        for line in range(0, len(splitCode), 1000):
-            if len(availableWorkers) == 0:
-                r = await asyncio.gather(tasks)
-                responses.append(*[await x.text() for x in r])
-                currentWorker = availableWorkers.pop()
-                tasks.append(
-                    asyncio.create_task(
-                        s.post(
-                            f"http://0.0.0.0:{currentWorker}/worker",
-                            json={"file": codeString[line : line + 1000]},
-                        )
+    for line in range(0, len(splitCode), 1000):
+        if len(availableWorkers) == 0:
+            r = await asyncio.gather(tasks)
+            responses.append(*[await x.text() for x in r])
+            currentWorker = availableWorkers.pop()
+            tasks.append(
+                asyncio.create_task(
+                    session.post(
+                        f"http://0.0.0.0:{currentWorker}/worker",
+                        json={"file": codeString[line : line + 1000]},
                     )
                 )
+            )
 
     return responses
 
 
 async def send_to_worker(codeList):
     allResponses = []
-    for code in codeList:
-        allResponses.append(await split_send(code))
+    async with aiohttp.ClientSession() as s:
+        for code in codeList:
+            allResponses.append(await split_send(code, s))
 
     return allResponses
 

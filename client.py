@@ -49,13 +49,14 @@ def avg_num_letters(codeArray):
 
 
 async def main():
-    print("Loading...")
+    print("Loading from file...")
     dataset = []
 
     with open("./podaci.json", encoding="utf-8") as f:
         for line in f:
             d = json.loads(line)
             dataset.append(d["content"])
+    print("Finished loading from file.")
 
     clientsWCode = generate_client_dict(dataset)
 
@@ -63,8 +64,7 @@ async def main():
         print(
             f"Client {client} on average has {avg_num_letters(clientsWCode[client])} letters."
         )
-
-    response = await send_code(clientsWCode)
+    await send_code(clientsWCode)
 
 
 asyncio.run(main())
