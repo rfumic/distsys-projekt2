@@ -1,23 +1,20 @@
 import asyncio
 import json
 import aiohttp
-import itertools
 
-def chunked(it,size):
-    it = iter(it)
-    while True:
-        p = dict(itertools.islice(it,size))
-        if not p:
-            break
-        yield p
 
-def generate_client_dict(code,codeSize, ids):
-    result = {id:[] for id in ids }
-    
-    counter = 0
-    for i in range(0, len(code), codeSize):
-        result[counter].append(code[i:i+codeSize])
-        counter+=1
+def generate_client_dict(dataset):
+    result = {}
+    currentId = 0
+    currentClientCodes = []
+
+    for code in dataset:
+        currentClientCodes.append(code)
+
+        if len(currentClientCodes) == 10:
+            result[currentId] = currentClientCodes
+            currentClientCodes = []
+            currentId += 1
 
     return result
 
@@ -26,31 +23,48 @@ async def send_code(clients):
     tasks = []
 
     async with aiohttp.ClientSession() as s:
-        for clientId, clientCode in clients.items():
-           tasks.append(asyncio.create_task(s.post('http://0.0.0.0:8081/process', json={'clientCode':clientCode, 'clientId':clientId})))
+        for id in clients:
+            tasks.append(
+                asyncio.create_task(
+                    s.post(
+                        "http://0.0.0.0:8081/process",
+                        json={"clientId": id, "clientCodes": clients[id]},
+                    )
+                )
+            )
 
         response = await asyncio.gather(*tasks)
-        responseJSON = [await r.json() for r in response]
+        responseParsed = [await r.text() for r in response]
 
-        return responseJSON
-    
+        return responseParsed
+
+
+def avg_num_letters(codeArray):
+    sum_of_lengths = 0
+
+    for code in codeArray:
+        sum_of_lengths += len("".join(code.split()))
+
+    return sum_of_lengths / len(codeArray)
+
+
 async def main():
-    print('Loading...')
-    clientIds = list(range(0,10000))
+    print("Loading...")
     dataset = []
 
-    with open('./podaci.json', encoding='utf-8') as f:
+    with open("./podaci.json", encoding="utf-8") as f:
         for line in f:
             d = json.loads(line)
-            dataset.append(d['content'])
+            dataset.append(d["content"])
 
-    clientsWCode = generate_client_dict(dataset[0],int(len(dataset[0])/len(clientIds)+1), clientIds)
+    clientsWCode = generate_client_dict(dataset)
 
-    results = await send_code(clientsWCode)
-    # for chunk in chunked(clientsWCode.items(), 200):
-    #     results = await send_code(chunk)
-    #     for r in results:
-    #        print(r)
+    for client in clientsWCode.keys():
+        print(
+            f"Client {client} on average has {avg_num_letters(clientsWCode[client])} letters."
+        )
+
+    response = await send_code(clientsWCode)
 
 
 asyncio.run(main())

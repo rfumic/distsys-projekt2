@@ -1,62 +1,83 @@
 import asyncio
 import aiohttp
-import sys
 import random
+import sys
 import datetime
 from aiohttp import web
 
 routes = web.RouteTableDef()
 
-NO_OF_WORKERS = random.randint(5,10)
+NO_OF_WORKERS = random.randint(5, 10)
 
 if len(sys.argv) > 1:
     workerPorts = sys.argv[1:]
 else:
     # Ako se master pokrene bez argumenata onda se smatra da su workeri
     # na portovima 8082-8091
-    workerPorts = [x for x in range(8082,8082+NO_OF_WORKERS)]
+    workerPorts = [x for x in range(8082, 8082 + NO_OF_WORKERS)]
+
+workers = {x: [] for x in range(NO_OF_WORKERS)}
+
+received_tasks = 0
+
+completed_tasks = 0
+
+print(f"Master running with {NO_OF_WORKERS} workers")
 
 
-workers ={id:{} for id in workerPorts}
+async def split_send(codeString):
+    splitCode = codeString.splitlines()
 
-availableWorkers = workerPorts
-
-
-def chunked(List):
-    for i in range(0, len(List), 1000):
-        yield List[i:i+1000] 
-
-async def send_to_worker(code):
+    availableWorkers = workerPorts
+    responses = []
     tasks = []
     async with aiohttp.ClientSession() as s:
-        currentWorker = workerPorts[0]
-        for chunk in chunked:
-            tasks.append(
-                asyncio.create_task(s.get(f"http://0.0.0.0:{currentWorker}", json={'file':chunk}))
-            )
+        for line in range(0, len(splitCode), 1000):
+            if len(availableWorkers) == 0:
+                r = await asyncio.gather(tasks)
+                responses.append(*[await x.text() for x in r])
+                currentWorker = availableWorkers.pop()
+                tasks.append(
+                    asyncio.create_task(
+                        s.post(
+                            f"http://0.0.0.0:{currentWorker}/worker",
+                            json={"file": codeString[line : line + 1000]},
+                        )
+                    )
+                )
 
-            currentWorker = 1 if currentWorker == NO_OF_WORKERS else currentWorker+1
-            r = await asyncio.gather(tasks)
-            result = [await x.json() for x in r] 
-    return result
+    return responses
+
+
+async def send_to_worker(codeList):
+    allResponses = []
+    for code in codeList:
+        allResponses.append(await split_send(code))
+
+    return allResponses
+
 
 @routes.post("/process")
 async def process(request):
+    global received_tasks
+    global completed_tasks
+    received_tasks += 1
+    req = await request.json()
+    clientId = req["clientId"]
+    clientCodes = req["clientCodes"]
     try:
-        req = await request.json()
-        clientId = req['clientId']
-        clientCode = req['clientCode'][0]
-        print(f"Request from client {clientId} at {datetime.datetime.now()}")
+        print(f"Received task from client {clientId} at {datetime.datetime.now()}")
 
-        if clientId == 98:
-            print(clientCode)
-        response = await send_to_worker(clientCode.splitlines())
+        response = await send_to_worker(clientCodes)
 
-        return web.json_response({"clientId":clientId,"result":response}, status=200)
+        print(f"Completed task from client {clientId} at {datetime.datetime.now()}")
+        completed_tasks += 1
+        return web.json_response({"Message": "Success"}, status=200)
 
     except Exception as e:
-        print({'clientId':clientId,'error':str(e)})
-    
+        print(f"Client: {clientId}")
+
+
 app = web.Application()
 app.router.add_routes(routes)
 web.run_app(app, port=8081)
